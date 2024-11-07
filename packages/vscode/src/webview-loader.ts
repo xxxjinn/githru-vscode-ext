@@ -1,7 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 
-import { getPrimaryColor, setPrimaryColor } from "./setting-repository";
+import { getTheme, setTheme } from "./setting-repository";
 import type { ClusterNode } from "./types/Node";
 
 const ANALYZE_DATA_KEY = "memento_analyzed_data";
@@ -14,7 +14,7 @@ export default class WebviewLoader implements vscode.Disposable {
     context: vscode.ExtensionContext,
     fetcher: GithruFetcherMap
   ) {
-    const { fetchClusterNodes, fetchBranches, fetchCurrentBranch } = fetcher;
+    const { fetchClusterNodes, fetchBranches, fetchCurrentBranch, fetchGithubInfo } = fetcher;
     const viewColumn = vscode.ViewColumn.One;
 
     //캐시 초기화
@@ -76,11 +76,19 @@ export default class WebviewLoader implements vscode.Disposable {
             payload: branches,
           });
         }
+        
+        if (command === "fetchGithubInfo") {
+          const githubInfo = await fetchGithubInfo();
+          await this.respondToMessage({ 
+            ...message,
+            payload: githubInfo,
+          });
+        }
 
-        if (command === "updatePrimaryColor") {
-          const colorCode = payload && JSON.parse(payload);
-          if (colorCode.primary) {
-            setPrimaryColor(colorCode.primary);
+        if (command === "updateTheme") {
+          const themeInfo = payload && JSON.parse(payload);
+          if (themeInfo.theme) {
+            setTheme(themeInfo.theme);
           }
         }
       } catch (e) {
@@ -111,13 +119,12 @@ export default class WebviewLoader implements vscode.Disposable {
     });
   }
 
-  private getWebviewContent(webview: vscode.Webview): string {
+  private getWebviewContent(webview: vscode.Webview) {
     const reactAppPathOnDisk = vscode.Uri.file(path.join(this.extensionPath, "dist", "webviewApp.js"));
     const reactAppUri = webview.asWebviewUri(reactAppPathOnDisk);
     // const reactAppUri = reactAppPathOnDisk.with({ scheme: "vscode-resource" });
 
-    const primaryColor = getPrimaryColor();
-
+    const theme = getTheme();
     const returnString = `
             <!DOCTYPE html>
             <html lang="en">
@@ -127,7 +134,7 @@ export default class WebviewLoader implements vscode.Disposable {
                     <title>githru-vscode-ext webview</title>
                     <script>
                         window.isProduction = true;   
-                        window.primaryColor = "${primaryColor}";                     
+                        window.theme = "${theme}";                       
                     </script>
                 </head>
                 <body>
@@ -141,6 +148,7 @@ export default class WebviewLoader implements vscode.Disposable {
         `;
     return returnString;
   }
+
   public setGlobalOwnerAndRepo(owner: string, repo: string) {
     if (this._panel) {
       this._panel.webview.postMessage({
@@ -156,4 +164,5 @@ type GithruFetcherMap = {
   fetchClusterNodes: GithruFetcher<ClusterNode[], [string]>;
   fetchBranches: GithruFetcher<{ branchList: string[]; head: string | null }>;
   fetchCurrentBranch: GithruFetcher<string>;
+  fetchGithubInfo: GithruFetcher<{ owner: string; repo: string }>;
 };
